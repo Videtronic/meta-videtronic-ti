@@ -1,0 +1,43 @@
+From f617602252797b51d7c2a55da6191da5e90a0e75 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jo=C3=A3o=20Paulo=20Gon=C3=A7alves?=
+ <jpaulo.silvagoncalves@gmail.com>
+Date: Mon, 21 Apr 2025 13:42:21 -0300
+Subject: [PATCH] media: cadence: csi2rx: Support reading link frequency from
+ mbus_config
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Newer drivers are using get_mbus_config to pass the link frequency and
+not the control V4L2_CID_LINK_FREQ. Add the to the driver the
+possibilitie to handle this newer drivers too for reading the link
+frequency. For now, this seem an issue on the downstream driver as
+upstream is fixed in e7bad98c205d17c745de9d83ebf73e53cbf99d48.
+
+Upstream-Status: Innapropriate [other].
+Signed-off-by: João Paulo Gonçalves <jpaulo.silvagoncalves@gmail.com>
+---
+ drivers/media/platform/cadence/cdns-csi2rx.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/cadence/cdns-csi2rx.c b/drivers/media/platform/cadence/cdns-csi2rx.c
+index 26b83cc47b5d78..24a6e3c2356bc1 100644
+--- a/drivers/media/platform/cadence/cdns-csi2rx.c
++++ b/drivers/media/platform/cadence/cdns-csi2rx.c
+@@ -197,11 +197,15 @@ static int csi2rx_configure_ext_dphy(struct csi2rx_priv *csi2rx)
+ 	struct phy_configure_opts_mipi_dphy *cfg = &opts.mipi_dphy;
+ 	struct v4l2_mbus_framefmt *framefmt;
+ 	struct v4l2_subdev_state *state;
++	struct media_pad *remote_pad;
+ 	const struct csi2rx_fmt *fmt;
+ 	s64 link_freq;
+ 	int ret;
+ 
+-	if (v4l2_ctrl_find(handler, V4L2_CID_LINK_FREQ)) {
++	remote_pad = media_entity_remote_source_pad_unique(&csi2rx->subdev.entity);
++	if (remote_pad) {
++		link_freq = v4l2_get_link_freq(remote_pad, 0, 0);
++	} else if (v4l2_ctrl_find(handler, V4L2_CID_LINK_FREQ)) {
+ 		link_freq = v4l2_get_link_freq(handler, 0, 0);
+ 	} else {
+ 		state = v4l2_subdev_get_locked_active_state(&csi2rx->subdev);

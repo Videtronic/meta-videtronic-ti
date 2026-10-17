@@ -1,0 +1,63 @@
+From e64c56b7f731755a0b80b2ec1216d52fd3263f59 Mon Sep 17 00:00:00 2001
+From: Cosmin Tanislav <demonsingur@gmail.com>
+Date: Fri, 28 Feb 2025 17:17:25 +0200
+Subject: [PATCH] i2c: atr: add static flag
+
+Some I2C ATRs do not support dynamic remapping, only static mapping
+of direct children.
+
+Add a new flag that prevents old mappings to be replaced or new mappings
+to be created in the alias finding code paths.
+
+Signed-off-by: Cosmin Tanislav <demonsingur@gmail.com>
+---
+ drivers/i2c/i2c-atr.c   | 6 +++++-
+ include/linux/i2c-atr.h | 3 +++
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/i2c/i2c-atr.c b/drivers/i2c/i2c-atr.c
+index 555d898910dfc5..c14c12c8daf532 100644
+--- a/drivers/i2c/i2c-atr.c
++++ b/drivers/i2c/i2c-atr.c
+@@ -337,12 +337,16 @@ i2c_atr_create_mapping_by_addr(struct i2c_atr_chan *chan, u16 addr)
+ static struct i2c_atr_alias_pair *
+ i2c_atr_get_mapping_by_addr(struct i2c_atr_chan *chan, u16 addr)
+ {
++	struct i2c_atr *atr = chan->atr;
+ 	struct i2c_atr_alias_pair *c2a;
+ 
+ 	c2a = i2c_atr_find_mapping_by_addr(chan, addr);
+ 	if (c2a)
+ 		return c2a;
+ 
++	if (atr->flags & I2C_ATR_F_STATIC)
++		return NULL;
++
+ 	c2a = i2c_atr_create_mapping_by_addr(chan, addr);
+ 	if (c2a)
+ 		return c2a;
+@@ -541,7 +545,7 @@ static int i2c_atr_attach_addr(struct i2c_adapter *adapter,
+ 	mutex_lock(&chan->alias_pairs_lock);
+ 
+ 	c2a = i2c_atr_create_mapping_by_addr(chan, addr);
+-	if (!c2a)
++	if (!c2a && !(atr->flags & I2C_ATR_F_STATIC))
+ 		c2a = i2c_atr_replace_mapping_by_addr(chan, addr);
+ 
+ 	if (!c2a) {
+diff --git a/include/linux/i2c-atr.h b/include/linux/i2c-atr.h
+index 5082f4dd0e2344..7c6a9627191d6a 100644
+--- a/include/linux/i2c-atr.h
++++ b/include/linux/i2c-atr.h
+@@ -20,8 +20,11 @@ struct i2c_atr;
+ 
+ /**
+  * enum i2c_atr_flags - Flags for an I2C ATR driver
++ *
++ * @I2C_ATR_F_STATIC: ATR does not support dynamic mapping, use static mapping
+  */
+ enum i2c_atr_flags {
++	I2C_ATR_F_STATIC = BIT(0),
+ };
+ 
+ /**

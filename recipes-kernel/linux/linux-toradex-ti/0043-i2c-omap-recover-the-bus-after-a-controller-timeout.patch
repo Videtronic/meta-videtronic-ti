@@ -1,0 +1,144 @@
+Upstream-Status: Pending
+
+diff --git a/drivers/i2c/busses/i2c-omap.c b/drivers/i2c/busses/i2c-omap.c
+index 31690c5..7844338 100644
+--- a/drivers/i2c/busses/i2c-omap.c
++++ b/drivers/i2c/busses/i2c-omap.c
+@@ -44,6 +44,8 @@
+ /* timeout waiting for the controller to respond */
+ #define OMAP_I2C_TIMEOUT (msecs_to_jiffies(5000))
+ 
++#define OMAP_I2C_MAX_TIMEOUT_RETRIES	3
++
+ /* timeout for pm runtime autosuspend */
+ #define OMAP_I2C_PM_TIMEOUT		1000	/* ms */
+ 
+@@ -497,6 +499,34 @@ static int omap_i2c_recover_bus(struct omap_i2c_dev *omap)
+ 	return i2c_recover_bus(&omap->adapter);
+ }
+ 
++static void omap_i2c_unwedge(struct omap_i2c_dev *omap)
++{
++	unsigned long timeout = jiffies + msecs_to_jiffies(50);
++	u16 systest;
++	bool idle;
++
++	for (;;) {
++		systest = omap_i2c_read_reg(omap, OMAP_I2C_SYSTEST_REG);
++		idle = (systest & OMAP_I2C_SYSTEST_SCL_I_FUNC) &&
++		       (systest & OMAP_I2C_SYSTEST_SDA_I_FUNC);
++		if (idle || time_after(jiffies, timeout))
++			break;
++		usleep_range(100, 200);
++	}
++
++	if (!idle) {
++		dev_warn(omap->dev,
++			 "bus wedged after timeout (systest 0x%04x), forcing recovery\n",
++			 systest);
++		i2c_recover_bus(&omap->adapter);
++	}
++
++	omap_i2c_reset(omap);
++	__omap_i2c_init(omap);
++	/* re-arm the bus monitor: the BB bit is meaningless after a reset */
++	omap->bb_valid = 0;
++}
++
+ /*
+  * Waiting on Bus Busy
+  */
+@@ -754,9 +784,13 @@ static int omap_i2c_xfer_msg(struct i2c_adapter *adap,
+ 	}
+ 
+ 	if (timeout == 0) {
+-		dev_err(omap->dev, "controller timed out\n");
+-		omap_i2c_reset(omap);
+-		__omap_i2c_init(omap);
++		dev_err(omap->dev,
++			"controller timed out (addr 0x%02x, stat 0x%04x, con 0x%04x, systest 0x%04x)\n",
++			msg->addr,
++			omap_i2c_read_reg(omap, OMAP_I2C_STAT_REG),
++			omap_i2c_read_reg(omap, OMAP_I2C_CON_REG),
++			omap_i2c_read_reg(omap, OMAP_I2C_SYSTEST_REG));
++		omap_i2c_unwedge(omap);
+ 		return -ETIMEDOUT;
+ 	}
+ 
+@@ -797,37 +831,52 @@ omap_i2c_xfer_common(struct i2c_adapter *adap, struct i2c_msg msgs[], int num,
+ 	struct omap_i2c_dev *omap = i2c_get_adapdata(adap);
+ 	int i;
+ 	int r;
++	int tries;
+ 
+ 	r = pm_runtime_get_sync(omap->dev);
+ 	if (r < 0)
+ 		goto out;
+ 
+-	r = omap_i2c_wait_for_bb_valid(omap);
+-	if (r < 0)
+-		goto out;
+-
+-	r = omap_i2c_wait_for_bb(omap);
+-	if (r < 0)
+-		goto out;
+-
+ 	if (omap->set_mpu_wkup_lat != NULL)
+ 		omap->set_mpu_wkup_lat(omap->dev, omap->latency);
+ 
+-	for (i = 0; i < num; i++) {
+-		r = omap_i2c_xfer_msg(adap, &msgs[i], (i == (num - 1)),
+-				      polling);
+-		if (r != 0)
++	/*
++	 * A timeout means the controller wedged, not that the slave is absent.
++	 * The i2c core will not retry for us: __i2c_transfer() only loops on
++	 * -EAGAIN, so -ETIMEDOUT propagates straight into the caller's probe.
++	 * Retry here, after omap_i2c_unwedge() has recovered the bus.
++	 */
++	for (tries = 0; ; tries++) {
++		r = omap_i2c_wait_for_bb_valid(omap);
++		if (r < 0)
++			break;
++
++		r = omap_i2c_wait_for_bb(omap);
++		if (r < 0)
++			break;
++
++		for (i = 0; i < num; i++) {
++			r = omap_i2c_xfer_msg(adap, &msgs[i], (i == (num - 1)),
++					      polling);
++			if (r != 0)
++				break;
++		}
++
++		if (r != -ETIMEDOUT || tries >= OMAP_I2C_MAX_TIMEOUT_RETRIES)
+ 			break;
++
++		dev_warn(omap->dev, "retrying transfer after timeout (%d/%d)\n",
++			 tries + 1, OMAP_I2C_MAX_TIMEOUT_RETRIES);
+ 	}
+ 
++	if (omap->set_mpu_wkup_lat != NULL)
++		omap->set_mpu_wkup_lat(omap->dev, -1);
++
+ 	if (r == 0)
+ 		r = num;
+ 
+ 	omap_i2c_wait_for_bb(omap);
+ 
+-	if (omap->set_mpu_wkup_lat != NULL)
+-		omap->set_mpu_wkup_lat(omap->dev, -1);
+-
+ out:
+ 	pm_runtime_mark_last_busy(omap->dev);
+ 	pm_runtime_put_autosuspend(omap->dev);
+@@ -1503,6 +1552,8 @@ omap_i2c_probe(struct platform_device *pdev)
+ 	adap->dev.parent = &pdev->dev;
+ 	adap->dev.of_node = pdev->dev.of_node;
+ 	adap->bus_recovery_info = &omap_i2c_bus_recovery_info;
++	/* let the core re-run a transfer that lost arbitration */
++	adap->retries = 3;
+ 
+ 	/* i2c device drivers may be active on return from add_adapter() */
+ 	adap->nr = pdev->id;

@@ -1,0 +1,76 @@
+From 9856bec567df27f6984ffaa876408af79c45ec53 Mon Sep 17 00:00:00 2001
+From: Cosmin Tanislav <demonsingur@gmail.com>
+Date: Fri, 28 Feb 2025 17:17:26 +0200
+Subject: [PATCH] i2c: atr: add passthrough flag
+
+Some I2C ATRs can have other I2C ATRs as children. The I2C messages of
+the child ATRs need to be forwarded as-is if the parent I2C ATR can
+only do static mapping.
+
+In the case of GMSL, the deserializer I2C ATR actually doesn't have I2C
+address remapping hardware capabilities, but it is able to select which
+GMSL link to talk to, allowing it to change the address of the
+serializer.
+
+The child ATRs need to have their alias pools defined in such a way to
+prevent overlapping addresses between them, but there's no way around
+this without orchestration between multiple ATR instances.
+
+To allow for this use-case, add a flag that allows unmapped addresses
+to be passed through, since they are already remapped by the child ATRs.
+
+There's no case where an address that has not been remapped by the child
+ATR will hit the parent ATR.
+
+Signed-off-by: Cosmin Tanislav <demonsingur@gmail.com>
+---
+ drivers/i2c/i2c-atr.c   | 7 +++++--
+ include/linux/i2c-atr.h | 2 ++
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/i2c/i2c-atr.c b/drivers/i2c/i2c-atr.c
+index c14c12c8daf532..5e09ac9ef59d5d 100644
+--- a/drivers/i2c/i2c-atr.c
++++ b/drivers/i2c/i2c-atr.c
+@@ -390,6 +390,9 @@ static int i2c_atr_map_msgs(struct i2c_atr_chan *chan, struct i2c_msg *msgs,
+ 		c2a = i2c_atr_get_mapping_by_addr(chan, msgs[i].addr);
+ 
+ 		if (!c2a) {
++			if (atr->flags & I2C_ATR_F_PASSTHROUGH)
++				continue;
++
+ 			dev_err(atr->dev, "client 0x%02x not mapped!\n",
+ 				msgs[i].addr);
+ 
+@@ -482,13 +485,13 @@ static int i2c_atr_smbus_xfer(struct i2c_adapter *adap, u16 addr,
+ 
+ 	c2a = i2c_atr_get_mapping_by_addr(chan, addr);
+ 
+-	if (!c2a) {
++	if (!c2a && !(atr->flags & I2C_ATR_F_PASSTHROUGH)) {
+ 		dev_err(atr->dev, "client 0x%02x not mapped!\n", addr);
+ 		mutex_unlock(&chan->alias_pairs_lock);
+ 		return -ENXIO;
+ 	}
+ 
+-	alias = c2a->alias;
++	alias = c2a ? c2a->alias : addr;
+ 
+ 	mutex_unlock(&chan->alias_pairs_lock);
+ 
+diff --git a/include/linux/i2c-atr.h b/include/linux/i2c-atr.h
+index 7c6a9627191d6a..f979b931ca056a 100644
+--- a/include/linux/i2c-atr.h
++++ b/include/linux/i2c-atr.h
+@@ -22,9 +22,11 @@ struct i2c_atr;
+  * enum i2c_atr_flags - Flags for an I2C ATR driver
+  *
+  * @I2C_ATR_F_STATIC: ATR does not support dynamic mapping, use static mapping
++ * @I2C_ATR_F_PASSTHROUGH: Allow unmapped incoming addresses to pass through
+  */
+ enum i2c_atr_flags {
+ 	I2C_ATR_F_STATIC = BIT(0),
++	I2C_ATR_F_PASSTHROUGH = BIT(1),
+ };
+ 
+ /**

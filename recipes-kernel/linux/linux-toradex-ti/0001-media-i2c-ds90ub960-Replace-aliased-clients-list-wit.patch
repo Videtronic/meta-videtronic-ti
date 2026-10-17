@@ -1,0 +1,80 @@
+From 688ba4f76294f9871f098301742b3838cf7d3855 Mon Sep 17 00:00:00 2001
+From: Romain Gantois <romain.gantois@bootlin.com>
+Date: Thu, 6 Mar 2025 17:23:23 +0100
+Subject: [PATCH] media: i2c: ds90ub960: Replace aliased clients list with
+ address list
+
+The ds90ub960 driver currently uses a list of i2c_client structs to keep
+track of used I2C address translator (ATR) alias slots for each RX port.
+
+Keeping these i2c_client structs in the alias slot list isn't actually
+needed, the driver only needs to know the client address for each slot.
+
+Convert the aliased_clients list to a list of aliased client addresses.
+This will allow removing the "client" parameter from the i2c-atr callbacks
+in a future patch.
+
+Tested-by: Tomi Valkeinen <tomi.valkeinen@ideasonboard.com>
+Signed-off-by: Romain Gantois <romain.gantois@bootlin.com>
+---
+ drivers/media/i2c/ds90ub960.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/media/i2c/ds90ub960.c b/drivers/media/i2c/ds90ub960.c
+index afbc6b457bacf2..7ad03e89a4d557 100644
+--- a/drivers/media/i2c/ds90ub960.c
++++ b/drivers/media/i2c/ds90ub960.c
+@@ -472,7 +472,7 @@ struct ub960_rxport {
+ 		};
+ 	} eq;
+ 
+-	const struct i2c_client *aliased_clients[UB960_MAX_PORT_ALIASES];
++	u16 aliased_addrs[UB960_MAX_PORT_ALIASES];
+ };
+ 
+ struct ub960_asd {
+@@ -1054,17 +1054,17 @@ static int ub960_atr_attach_client(struct i2c_atr *atr, u32 chan_id,
+ 	struct device *dev = &priv->client->dev;
+ 	unsigned int reg_idx;
+ 
+-	for (reg_idx = 0; reg_idx < ARRAY_SIZE(rxport->aliased_clients); reg_idx++) {
+-		if (!rxport->aliased_clients[reg_idx])
++	for (reg_idx = 0; reg_idx < ARRAY_SIZE(rxport->aliased_addrs); reg_idx++) {
++		if (!rxport->aliased_addrs[reg_idx])
+ 			break;
+ 	}
+ 
+-	if (reg_idx == ARRAY_SIZE(rxport->aliased_clients)) {
++	if (reg_idx == ARRAY_SIZE(rxport->aliased_addrs)) {
+ 		dev_err(dev, "rx%u: alias pool exhausted\n", rxport->nport);
+ 		return -EADDRNOTAVAIL;
+ 	}
+ 
+-	rxport->aliased_clients[reg_idx] = client;
++	rxport->aliased_addrs[reg_idx] = client->addr;
+ 
+ 	ub960_rxport_write(priv, chan_id, UB960_RR_SLAVE_ID(reg_idx),
+ 			   client->addr << 1);
+@@ -1085,18 +1085,18 @@ static void ub960_atr_detach_client(struct i2c_atr *atr, u32 chan_id,
+ 	struct device *dev = &priv->client->dev;
+ 	unsigned int reg_idx;
+ 
+-	for (reg_idx = 0; reg_idx < ARRAY_SIZE(rxport->aliased_clients); reg_idx++) {
+-		if (rxport->aliased_clients[reg_idx] == client)
++	for (reg_idx = 0; reg_idx < ARRAY_SIZE(rxport->aliased_addrs); reg_idx++) {
++		if (rxport->aliased_addrs[reg_idx] == client->addr)
+ 			break;
+ 	}
+ 
+-	if (reg_idx == ARRAY_SIZE(rxport->aliased_clients)) {
++	if (reg_idx == ARRAY_SIZE(rxport->aliased_addrs)) {
+ 		dev_err(dev, "rx%u: client 0x%02x is not mapped!\n",
+ 			rxport->nport, client->addr);
+ 		return;
+ 	}
+ 
+-	rxport->aliased_clients[reg_idx] = NULL;
++	rxport->aliased_addrs[reg_idx] = 0;
+ 
+ 	ub960_rxport_write(priv, chan_id, UB960_RR_SLAVE_ALIAS(reg_idx), 0);
+ 

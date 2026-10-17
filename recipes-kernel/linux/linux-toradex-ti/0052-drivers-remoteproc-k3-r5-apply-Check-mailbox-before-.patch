@@ -1,0 +1,39 @@
+From 3a64d285b02bba4d1a3a18baa71cd2f1db7e9bc6 Mon Sep 17 00:00:00 2001
+From: Jakub Kostiw <kostiwj@gmail.com>
+Date: Wed, 12 Nov 2025 20:30:52 +0100
+Subject: [PATCH] drivers: remoteproc: k3-r5: apply 'Check mailbox before
+ sending suspend message'
+
+Source patch: https://git.toradex.com/cgit/linux-toradex.git/commit/?h=toradex_ti-linux-6.6.y&id=862e9ce2526a4d21dec966f550c4c23f4b7f705d
+
+Signed-off-by: Jakub Kostiw <kostiwj@gmail.com>
+---
+ drivers/remoteproc/ti_k3_r5_remoteproc.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/remoteproc/ti_k3_r5_remoteproc.c b/drivers/remoteproc/ti_k3_r5_remoteproc.c
+index 43e0f7cb642ca..d7f85e6637913 100644
+--- a/drivers/remoteproc/ti_k3_r5_remoteproc.c
++++ b/drivers/remoteproc/ti_k3_r5_remoteproc.c
+@@ -521,11 +521,13 @@ static int k3_r5_suspend(struct rproc *rproc)
+ 	kproc->suspend_status = 0;
+ 	reinit_completion(&kproc->suspend_comp);
+ 
+-	ret = mbox_send_message(kproc->mbox, (void *)msg);
+-	if (ret < 0) {
+-		dev_err(dev, "PM mbox_send_message failed: %d\n", ret);
+-		return ret;
+-	}
++	if (kproc->mbox) {
++		ret = mbox_send_message(kproc->mbox, (void *)msg);
++		if (ret < 0) {
++			dev_err(dev, "PM mbox_send_message failed: %d\n", ret);
++			return ret;
++		}
++ 	}
+ 
+ 	ret = wait_for_completion_timeout(&kproc->suspend_comp, to);
+ 	if (ret == 0) {
+-- 
+2.43.0
+

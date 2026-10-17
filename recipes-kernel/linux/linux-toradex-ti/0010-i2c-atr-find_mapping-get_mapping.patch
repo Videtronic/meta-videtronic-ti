@@ -1,0 +1,56 @@
+From bfd7ecafd8822fb7980299ab9f361fbf82a557f3 Mon Sep 17 00:00:00 2001
+From: Cosmin Tanislav <demonsingur@gmail.com>
+Date: Fri, 28 Feb 2025 17:17:19 +0200
+Subject: [PATCH] i2c: atr: find_mapping() -> get_mapping()
+
+A find operation implies that a null result is not an error.
+
+Use get naming to clarify things and to prepare for splitting up the
+logic inside this function.
+
+Signed-off-by: Cosmin Tanislav <demonsingur@gmail.com>
+Reviewed-by: Romain Gantois <romain.gantois@bootlin.com>
+---
+ drivers/i2c/i2c-atr.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/i2c/i2c-atr.c b/drivers/i2c/i2c-atr.c
+index 89662329678835..45d8c4cb6b96d9 100644
+--- a/drivers/i2c/i2c-atr.c
++++ b/drivers/i2c/i2c-atr.c
+@@ -241,7 +241,7 @@ static void i2c_atr_release_alias(struct i2c_atr_alias_pool *alias_pool, u16 ali
+ 
+ /* Must be called with alias_pairs_lock held */
+ static struct i2c_atr_alias_pair *
+-i2c_atr_find_mapping_by_addr(struct i2c_atr_chan *chan, u16 addr)
++i2c_atr_get_mapping_by_addr(struct i2c_atr_chan *chan, u16 addr)
+ {
+ 	struct i2c_atr *atr = chan->atr;
+ 	struct i2c_atr_alias_pair *c2a;
+@@ -335,7 +335,7 @@ static int i2c_atr_map_msgs(struct i2c_atr_chan *chan, struct i2c_msg *msgs,
+ 	for (i = 0; i < num; i++) {
+ 		chan->orig_addrs[i] = msgs[i].addr;
+ 
+-		c2a = i2c_atr_find_mapping_by_addr(chan, msgs[i].addr);
++		c2a = i2c_atr_get_mapping_by_addr(chan, msgs[i].addr);
+ 
+ 		if (!c2a) {
+ 			dev_err(atr->dev, "client 0x%02x not mapped!\n",
+@@ -428,7 +428,7 @@ static int i2c_atr_smbus_xfer(struct i2c_adapter *adap, u16 addr,
+ 
+ 	mutex_lock(&chan->alias_pairs_lock);
+ 
+-	c2a = i2c_atr_find_mapping_by_addr(chan, addr);
++	c2a = i2c_atr_get_mapping_by_addr(chan, addr);
+ 
+ 	if (!c2a) {
+ 		dev_err(atr->dev, "client 0x%02x not mapped!\n", addr);
+@@ -536,7 +536,7 @@ static void i2c_atr_detach_addr(struct i2c_adapter *adapter,
+ 
+ 	mutex_lock(&chan->alias_pairs_lock);
+ 
+-	c2a = i2c_atr_find_mapping_by_addr(chan, addr);
++	c2a = i2c_atr_get_mapping_by_addr(chan, addr);
+ 	if (!c2a) {
+ 		 /* This should never happen */
+ 		dev_warn(atr->dev, "Unable to find address mapping\n");

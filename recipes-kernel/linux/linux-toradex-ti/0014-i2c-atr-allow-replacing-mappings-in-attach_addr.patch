@@ -1,0 +1,31 @@
+From c663a98f6f4dee0fb2f2393c185ac4ababd34fb3 Mon Sep 17 00:00:00 2001
+From: Cosmin Tanislav <demonsingur@gmail.com>
+Date: Fri, 28 Feb 2025 17:17:23 +0200
+Subject: [PATCH] i2c: atr: allow replacing mappings in attach_addr()
+
+It is possible for aliases to be exhausted while we are still attaching
+children.
+
+Allow replacing mapping on attach by calling
+i2c_atr_replace_mapping_by_addr() if i2c_atr_create_mapping_by_addr()
+fails.
+
+Signed-off-by: Cosmin Tanislav <demonsingur@gmail.com>
+---
+ drivers/i2c/i2c-atr.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/i2c/i2c-atr.c b/drivers/i2c/i2c-atr.c
+index 227249269f638f..e5d9f7fac1957c 100644
+--- a/drivers/i2c/i2c-atr.c
++++ b/drivers/i2c/i2c-atr.c
+@@ -539,6 +539,9 @@ static int i2c_atr_attach_addr(struct i2c_adapter *adapter,
+ 	mutex_lock(&chan->alias_pairs_lock);
+ 
+ 	c2a = i2c_atr_create_mapping_by_addr(chan, addr);
++	if (!c2a)
++		c2a = i2c_atr_replace_mapping_by_addr(chan, addr);
++
+ 	if (!c2a) {
+ 		dev_err(atr->dev, "failed to find a free alias\n");
+ 		ret = -EBUSY;

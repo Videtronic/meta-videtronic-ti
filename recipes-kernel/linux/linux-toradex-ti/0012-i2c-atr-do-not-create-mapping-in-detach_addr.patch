@@ -1,0 +1,32 @@
+From 974c5b60501c220a2632365f725b8388d897db59 Mon Sep 17 00:00:00 2001
+From: Cosmin Tanislav <demonsingur@gmail.com>
+Date: Fri, 28 Feb 2025 17:17:21 +0200
+Subject: [PATCH] i2c: atr: do not create mapping in detach_addr()
+
+It is useless to create a new mapping just to detach it immediately.
+
+Use the newly added i2c_atr_find_mapping_by_addr() function to avoid it,
+and exit without logging an error if not found.
+
+Signed-off-by: Cosmin Tanislav <demonsingur@gmail.com>
+Reviewed-by: Romain Gantois <romain.gantois@bootlin.com>
+---
+ drivers/i2c/i2c-atr.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/i2c/i2c-atr.c b/drivers/i2c/i2c-atr.c
+index f36eb4f94f730b..76b3cf94e29baa 100644
+--- a/drivers/i2c/i2c-atr.c
++++ b/drivers/i2c/i2c-atr.c
+@@ -582,10 +582,8 @@ static void i2c_atr_detach_addr(struct i2c_adapter *adapter,
+ 
+ 	mutex_lock(&chan->alias_pairs_lock);
+ 
+-	c2a = i2c_atr_get_mapping_by_addr(chan, addr);
++	c2a = i2c_atr_find_mapping_by_addr(chan, addr);
+ 	if (!c2a) {
+-		 /* This should never happen */
+-		dev_warn(atr->dev, "Unable to find address mapping\n");
+ 		mutex_unlock(&chan->alias_pairs_lock);
+ 		return;
+ 	}

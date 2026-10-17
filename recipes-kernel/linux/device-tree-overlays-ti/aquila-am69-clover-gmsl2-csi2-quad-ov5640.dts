@@ -1,0 +1,627 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/*
+ * Aquila AM69 Quad OV5640 over GMSL2 (CSI2)
+ */
+
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/media/video-interfaces.h>
+
+/ {
+	compatible = "toradex,aquila-am69";
+};
+
+&{/} {
+	clk_cam0_osc24: clk-cam0-osc24 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
+
+	clk_cam1_osc24: clk-cam1-osc24 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
+
+	clk_cam2_osc24: clk-cam2-osc24 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
+
+	clk_cam3_osc24: clk-cam3-osc24 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
+
+	regulator_cam0: regulator-cam0 {
+		compatible = "regulator-fixed";
+		gpios = <&gmsl_ser0 0 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cam0>;
+		enable-active-high;
+		regulator-name = "V_CAM0";
+		startup-delay-us = <5000>;
+	};
+
+	regulator_cam1: regulator-cam1 {
+		compatible = "regulator-fixed";
+		gpios = <&gmsl_ser1 0 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cam1>;
+		enable-active-high;
+		regulator-name = "V_CAM1";
+		startup-delay-us = <5000>;
+	};
+
+	regulator_cam2: regulator-cam2 {
+		compatible = "regulator-fixed";
+		gpios = <&gmsl_ser2 0 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cam2>;
+		enable-active-high;
+		regulator-name = "V_CAM2";
+		startup-delay-us = <5000>;
+	};
+
+	regulator_cam3: regulator-cam3 {
+		compatible = "regulator-fixed";
+		gpios = <&gmsl_ser3 0 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cam3>;
+		enable-active-high;
+		regulator-name = "V_CAM3";
+		startup-delay-us = <5000>;
+	};
+
+	reg_3v3_csi: regulator-3v3-csi {
+		compatible = "regulator-fixed";
+		regulator-name = "V_CSI";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
+	reg_12v_cam: regulator-12v-cam {
+		compatible = "regulator-fixed";
+		regulator-name = "V_12V_IN";
+		regulator-min-microvolt = <12000000>;
+		regulator-max-microvolt = <12000000>;
+	};
+};
+
+/* Aquila I2C_4_CSI1 */
+&main_i2c1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	max96724: gmsl-deserializer@27 {
+		compatible = "maxim,max96724";
+		reg = <0x27>;
+		port0-poc-supply = <&regulator_gmlsa>;
+		port1-poc-supply = <&regulator_gmlsb>;
+		port2-poc-supply = <&regulator_gmlsc>;
+		port3-poc-supply = <&regulator_gmlsd>;
+	};
+
+	regulator@28 {
+		compatible = "maxim,max20086";
+		reg = <0x28>;
+		in-supply = <&reg_12v_cam>;
+		vdd-supply = <&reg_3v3_csi>;
+
+		regulators {
+			regulator_gmlsd: OUT1 {
+				regulator-name = "VPOC_D";
+			};
+
+			regulator_gmlsc: OUT2 {
+				regulator-name = "VPOC_C";
+			};
+
+			regulator_gmlsb: OUT3 {
+				regulator-name = "VPOC_B";
+			};
+
+			regulator_gmlsa: OUT4 {
+				regulator-name = "VPOC_A";
+			};
+		};
+	};
+};
+
+&max96724 {
+	i2c-alias-pool = <0x42 0x43 0x44 0x45>;
+	
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		
+		port@4 {
+			reg = <4>;
+			
+			gmsl_des_csi_da_out: endpoint {
+				remote-endpoint = <&csi2rx1_in>;
+				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+				lane-polarities = <0 0 1 0 1>;
+				link-frequencies = /bits/ 64 <500000000>;
+			};
+		};
+	};
+};
+
+&max96724 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			gmsl_des0_in: endpoint {
+				remote-endpoint = <&gmsl_ser0_out>;
+			};
+		};
+		
+		port@1 {
+			reg = <1>;
+
+			gmsl_des1_in: endpoint {
+				remote-endpoint = <&gmsl_ser1_out>;
+			};
+		};
+
+		port@2 {
+			reg = <2>;
+
+			gmsl_des2_in: endpoint {
+				remote-endpoint = <&gmsl_ser2_out>;
+			};
+		};
+
+		port@3 {
+			reg = <3>;
+
+			gmsl_des3_in: endpoint {
+				remote-endpoint = <&gmsl_ser3_out>;
+			};
+		};
+	};
+
+	i2c-atr {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		i2c@0 {
+			reg  = <0x0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			gmsl_ser0: gmsl-serializer@42 {
+				compatible = "maxim,max96717";
+				reg = <0x42>;
+				#gpio-cells = <2>;
+				gpio-controller;
+				gpio-ranges = <&gmsl_ser0 0 0 11>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						gmsl_ser0_out: endpoint {
+							remote-endpoint = <&gmsl_des0_in>;
+						};
+					};
+				};
+			};
+		};
+		
+		i2c@1 {
+			reg  = <0x01>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			gmsl_ser1: gmsl-serializer@42 {
+				compatible = "maxim,max96717";
+				reg = <0x42>;
+				#gpio-cells = <2>;
+				gpio-controller;
+				gpio-ranges = <&gmsl_ser1 0 0 11>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						gmsl_ser1_out: endpoint {
+							remote-endpoint = <&gmsl_des1_in>;
+						};
+					};
+				};
+			};
+		};
+
+		i2c@2 {
+			reg  = <0x02>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			gmsl_ser2: gmsl-serializer@42 {
+				compatible = "maxim,max96717";
+				reg = <0x42>;
+				#gpio-cells = <2>;
+				gpio-controller;
+				gpio-ranges = <&gmsl_ser2 0 0 11>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						gmsl_ser2_out: endpoint {
+							remote-endpoint = <&gmsl_des2_in>;
+						};
+					};
+				};
+			};
+		};
+
+		i2c@3 {
+			reg  = <0x03>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			gmsl_ser3: gmsl-serializer@42 {
+				compatible = "maxim,max96717";
+				reg = <0x42>;
+				#gpio-cells = <2>;
+				gpio-controller;
+				gpio-ranges = <&gmsl_ser3 0 0 11>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						gmsl_ser3_out: endpoint {
+							remote-endpoint = <&gmsl_des3_in>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
+
+&gmsl_ser0 {
+	status = "okay";
+
+	i2c-alias-pool = <0x50 0x51>;
+
+	i2c-atr {
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		
+		gmsl_ser0_i2c_0: i2c@0 {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x0>;
+		};
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			gmsl_ser0_csi_in: endpoint {
+				remote-endpoint = <&cam0_csi_out>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				lane-polarities = <1 1 1>;
+				link-frequencies = /bits/ 64 <400000000>;
+			};
+		};
+	};
+
+	pinctrl_cam0: cam0-pingrp {
+		enable-pin {
+			pins = "mfp0";
+			function = "gpio";
+			output-enable;
+		};
+	};
+};
+
+&gmsl_ser1 {
+	status = "okay";
+
+	i2c-alias-pool = <0x52 0x53>;
+
+	i2c-atr {
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		gmsl_ser1_i2c_0: i2c@0 {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x0>;
+		};
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			gmsl_ser1_csi_in: endpoint {
+				remote-endpoint = <&cam1_csi_out>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				lane-polarities = <1 1 1>;
+				link-frequencies = /bits/ 64 <400000000>;
+			};
+		};
+	};
+
+	pinctrl_cam1: cam1-pingrp {
+		enable-pin {
+			pins = "mfp0";
+			function = "gpio";
+			output-enable;
+		};
+	};
+};
+
+&gmsl_ser2 {
+	status = "okay";
+
+	i2c-alias-pool = <0x54 0x55>;
+
+	i2c-atr {
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		
+		gmsl_ser2_i2c_0: i2c@0 {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x0>;
+		};
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			gmsl_ser2_csi_in: endpoint {
+				remote-endpoint = <&cam2_csi_out>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				lane-polarities = <1 1 1>;
+				link-frequencies = /bits/ 64 <400000000>;
+			};
+		};
+	};
+
+	pinctrl_cam2: cam2-pingrp {
+		enable-pin {
+			pins = "mfp0";
+			function = "gpio";
+			output-enable;
+		};
+	};
+};
+
+&gmsl_ser3 {
+	status = "okay";
+
+	i2c-alias-pool = <0x56 0x57>;
+
+	i2c-atr {
+		status = "okay";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		
+		gmsl_ser3_i2c_0: i2c@0 {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x0>;
+		};
+	};
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			gmsl_ser3_csi_in: endpoint {
+				remote-endpoint = <&cam3_csi_out>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				lane-polarities = <1 1 1>;
+				link-frequencies = /bits/ 64 <400000000>;
+			};
+		};
+	};
+
+	pinctrl_cam3: cam3-pingrp {
+		enable-pin {
+			pins = "mfp0";
+			function = "gpio";
+			output-enable;
+		};
+	};
+};
+
+&gmsl_ser0_i2c_0 {
+	cam_0: ov5640@3c {
+		status = "okay";
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+
+		clocks = <&clk_cam0_osc24>;
+		clock-names = "xclk";
+
+		AVDD-supply = <&regulator_cam0>;
+		DVDD-supply = <&regulator_cam0>;
+		DOVDD-supply = <&regulator_cam0>;
+
+		rotation = <180>;
+		orientation = <2>;
+
+		vc = <0>;
+
+		port {
+			cam0_csi_out: endpoint {
+				remote-endpoint = <&gmsl_ser0_csi_in>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				link-frequencies = /bits/ 64 <384000000>;
+				clock-noncontinuous;
+			};
+		};
+	};
+};
+
+&gmsl_ser1_i2c_0 {
+	cam_1: ov5640@3c {
+		status = "okay";
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+
+		clocks = <&clk_cam1_osc24>;
+		clock-names = "xclk";
+
+		AVDD-supply = <&regulator_cam1>;
+		DVDD-supply = <&regulator_cam1>;
+		DOVDD-supply = <&regulator_cam1>;
+
+		rotation = <180>;
+		orientation = <2>;
+
+		vc = <1>;
+
+		port {
+			cam1_csi_out: endpoint {
+				remote-endpoint = <&gmsl_ser1_csi_in>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				link-frequencies = /bits/ 64 <384000000>;
+				clock-noncontinuous;
+			};
+		};
+	};
+};
+
+&gmsl_ser2_i2c_0 {
+	cam_2: ov5640@3c {
+		status = "okay";
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+
+		clocks = <&clk_cam2_osc24>;
+		clock-names = "xclk";
+
+		AVDD-supply = <&regulator_cam2>;
+		DVDD-supply = <&regulator_cam2>;
+		DOVDD-supply = <&regulator_cam2>;
+
+		rotation = <180>;
+		orientation = <2>;
+
+		vc = <2>;
+
+		port {
+			cam2_csi_out: endpoint {
+				remote-endpoint = <&gmsl_ser2_csi_in>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				link-frequencies = /bits/ 64 <384000000>;
+				clock-noncontinuous;
+			};
+		};
+	};
+};
+
+&gmsl_ser3_i2c_0 {
+	cam_3: ov5640@3c {
+		status = "okay";
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+
+		clocks = <&clk_cam1_osc24>;
+		clock-names = "xclk";
+
+		AVDD-supply = <&regulator_cam3>;
+		DVDD-supply = <&regulator_cam3>;
+		DOVDD-supply = <&regulator_cam3>;
+
+		rotation = <180>;
+		orientation = <2>;
+
+		vc = <3>;
+
+		port {
+			cam3_csi_out: endpoint {
+				remote-endpoint = <&gmsl_ser3_csi_in>;
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				link-frequencies = /bits/ 64 <384000000>;
+				clock-noncontinuous;
+			};
+		};
+	};
+};
+
+&csi1_port0 {
+	status = "okay";
+
+	csi2rx1_in: endpoint {
+		remote-endpoint = <&gmsl_des_csi_da_out>;
+		clock-lanes = <0>;
+		data-lanes = <1 2 3 4>;
+		link-frequencies = /bits/ 64 <500000000>;
+	};
+};
+
+&dphy1 {
+	status = "okay";
+};
+
+&ti_csi2rx1 {
+	status = "okay";
+};

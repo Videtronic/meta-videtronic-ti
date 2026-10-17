@@ -1,0 +1,107 @@
+From 95b7b3ff99e1c741238af817342e207097526cd8 Mon Sep 17 00:00:00 2001
+From: Jakub Kostiw <kostiwj@gmail.com>
+Date: Sat, 11 Oct 2025 20:14:11 +0200
+Subject: [PATCH] media: i2c: imx219: implement configurable VC via devicetree
+
+Signed-off-by: Jakub Kostiw <kostiwj@gmail.com>
+---
+ drivers/media/i2c/imx219.c | 34 +++++++++++++++++++++++++++++++++-
+ 1 file changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/i2c/imx219.c b/drivers/media/i2c/imx219.c
+index b36fb9b04a64..cea32b7c92a2 100644
+--- a/drivers/media/i2c/imx219.c
++++ b/drivers/media/i2c/imx219.c
+@@ -38,6 +38,9 @@
+ #define IMX219_MODE_STANDBY		0x00
+ #define IMX219_MODE_STREAMING		0x01
+ 
++#define IMX219_REG_CSI_CH_ID		CCI_REG8(0x0110)
++#define IMX219_VC_ID_MAX		3
++
+ #define IMX219_REG_CSI_LANE_MODE	CCI_REG8(0x0114)
+ #define IMX219_CSI_2_LANE_MODE		0x01
+ #define IMX219_CSI_4_LANE_MODE		0x03
+@@ -471,6 +474,9 @@ struct imx219 {
+ 
+ 	/* Two or Four lanes */
+ 	u8 lanes;
++
++	/* Virtual channel ID */
++	u8 vc;
+ };
+ 
+ static inline struct imx219 *to_imx219(struct v4l2_subdev *_sd)
+@@ -601,6 +607,7 @@ static int imx219_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+ {
+ 	struct v4l2_mbus_framefmt *format;
+ 	struct v4l2_subdev_state *state;
++	struct imx219 *imx219 = to_imx219(sd);
+ 	u32 bpp;
+ 	int ret = 0;
+ 
+@@ -626,7 +633,7 @@ static int imx219_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
+ 	fd->entry[fd->num_entries].flags = V4L2_MBUS_FRAME_DESC_FL_LEN_MAX;
+ 	fd->entry[fd->num_entries].length = (format->width * format->height * bpp) / 8;
+ 	fd->entry[fd->num_entries].pixelcode = format->code;
+-	fd->entry[fd->num_entries].bus.csi2.vc = 0;
++	fd->entry[fd->num_entries].bus.csi2.vc = imx219->vc;
+ 	if (format->code == MEDIA_BUS_FMT_SRGGB8_1X8)
+ 		fd->entry[fd->num_entries].bus.csi2.dt = 0x2a; /* SRGGB8 */
+ 	else if (format->code == MEDIA_BUS_FMT_SRGGB10_1X10)
+@@ -834,6 +841,12 @@ static int imx219_configure_lanes(struct imx219 *imx219)
+ 			 IMX219_CSI_4_LANE_MODE, NULL);
+ };
+ 
++static int imx219_configure_vc(struct imx219 *imx219)
++{
++	return cci_write(imx219->regmap, IMX219_REG_CSI_CH_ID,
++			 imx219->vc, NULL);
++}
++
+ static int imx219_start_streaming(struct imx219 *imx219,
+ 				  struct v4l2_subdev_state *state)
+ {
+@@ -861,6 +874,13 @@ static int imx219_start_streaming(struct imx219 *imx219,
+ 		goto err_rpm_put;
+ 	}
+ 
++	/* Configure Virtual Channel ID */
++	ret = imx219_configure_vc(imx219);
++	if (ret) {
++		dev_err(&client->dev, "%s failed to configure VC\n", __func__);
++		return ret;
++	}
++
+ 	/* Apply default values of current mode */
+ 	reg_list = &imx219->mode->reg_list;
+ 	ret = cci_multi_reg_write(imx219->regmap, reg_list->regs,
+@@ -1277,6 +1297,7 @@ static int imx219_probe(struct i2c_client *client)
+ 	struct device *dev = &client->dev;
+ 	struct imx219 *imx219;
+ 	int ret;
++	u32 vc;
+ 
+ 	imx219 = devm_kzalloc(&client->dev, sizeof(*imx219), GFP_KERNEL);
+ 	if (!imx219)
+@@ -1331,6 +1352,17 @@ static int imx219_probe(struct i2c_client *client)
+ 	if (ret)
+ 		goto error_power_off;
+ 
++	if (!device_property_read_u32(dev, "vc", &vc)) {
++		if (vc > IMX219_VC_ID_MAX) {
++				dev_warn(dev, "Invalid vc %u, using 0\n", vc);
++				imx219->vc = 0;
++		}
++		else
++				imx219->vc = vc;
++	}
++
++	dev_dbg(dev, "Using virtual channel %u\n", imx219->vc);
++
+ 	/* Set default mode to max resolution */
+ 	imx219->mode = &supported_modes[0];
+ 
+-- 
+2.43.0
+
